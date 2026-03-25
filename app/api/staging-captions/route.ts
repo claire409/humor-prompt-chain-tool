@@ -18,35 +18,59 @@ function uniqueBases(preferred?: string | null): string[] {
   return out;
 }
 
-function normalizeCaptions(data: unknown): string[] {
+const CAPTION_TARGET = 5;
+const MAX_GENERATE_ATTEMPTS = 5;
+
+/** Pairs id + text so we never misalign ids with strings when trimming batches. */
+function parseCaptionPairs(data: unknown): { id?: string; text: string }[] {
+  if (data == null) return [];
+  if (typeof data === 'string') return [{ text: data }];
+
   if (Array.isArray(data)) {
-    return data.map((item) => {
-      if (typeof item === 'string') return item;
+    const out: { id?: string; text: string }[] = [];
+    for (const item of data) {
+      if (typeof item === 'string') {
+        out.push({ text: item });
+        continue;
+      }
       if (item && typeof item === 'object') {
         const o = item as Record<string, unknown>;
-        const text = o.content ?? o.caption ?? o.text;
-        if (typeof text === 'string') return text;
+        const id = o.id != null ? String(o.id) : undefined;
+        const text = o.content ?? o.caption ?? o.text ?? o.body ?? o.message;
+        if (typeof text === 'string' && text.trim() !== '') {
+          out.push({ id, text });
+          continue;
+        }
       }
-      return typeof item === 'string' ? item : JSON.stringify(item);
-    });
+    }
+    return out;
   }
-  if (data && typeof data === 'object' && 'captions' in data) {
-    const inner = (data as { captions: unknown }).captions;
-    return normalizeCaptions(inner);
+
+  if (typeof data === 'object') {
+    const o = data as Record<string, unknown>;
+    for (const k of ['captions', 'data', 'results', 'items', 'rows', 'output']) {
+      if (k in o && o[k] != null) {
+        const inner = parseCaptionPairs(o[k]);
+        if (inner.length) return inner;
+      }
+    }
   }
   return [];
 }
 
-function extractCaptionIds(data: unknown): string[] {
-  if (!Array.isArray(data)) return [];
-  return data
-    .map((item) => {
-      if (!item || typeof item !== 'object') return null;
-      const id = (item as Record<string, unknown>).id;
-      if (typeof id === 'string' || typeof id === 'number') return String(id);
-      return null;
-    })
-    .filter((id): id is string => Boolean(id));
+function captionRequestBody(need: number, imageId: string | number, humorFlavorId: number) {
+  return {
+    imageId,
+    humorFlavorId,
+    count: need,
+    numCaptions: need,
+    numberOfCaptions: need,
+    maxCaptions: need,
+    n: need,
+    captionCount: need,
+    desiredCaptions: need,
+    targetCount: need,
+  };
 }
 
 export async function POST(request: Request) {
@@ -230,39 +254,63 @@ export async function POST(request: Request) {
       );
     }
 
-    const s4 = await fetch(`${apiBase}/${captionsPath}`, {
-      method: 'POST',
-      headers: { ...authHeaders, Accept: 'application/json' },
-      body: JSON.stringify({
-        imageId,
-        humorFlavorId,
-        // Request exactly 5 captions (some environments use different key names).
-        count: 5,
-        numCaptions: 5,
-        numberOfCaptions: 5,
-        maxCaptions: 5,
-        n: 5,
-      }),
-    });
+    const mergedPairs: { id?: string; text: string }[] = [];
+    let lastCaptionError = '';
 
-    if (!s4.ok) {
-      const errText = await s4.text();
+    for (let attempt = 1; attempt <= MAX_GENERATE_ATTEMPTS && mergedPairs.length < CAPTION_TARGET; attempt++) {
+      const need = CAPTION_TARGET - mergedPairs.length;
+      const s4 = await fetch(`${apiBase}/${captionsPath}`, {
+        method: 'POST',
+        headers: { ...authHeaders, Accept: 'application/json' },
+        body: JSON.stringify(captionRequestBody(need, imageId, humorFlavorId)),
+      });
+
+      if (!s4.ok) {
+        lastCaptionError = await s4.text();
+        break;
+      }
+
+      const rawCaptions = await s4.json();
+      const batchPairs = parseCaptionPairs(rawCaptions);
+      if (batchPairs.length === 0) {
+        lastCaptionError = 'Empty caption payload';
+        break;
+      }
+
+      const take = Math.min(need, batchPairs.length);
+      mergedPairs.push(...batchPairs.slice(0, take));
+
+      // If this round returned more DB rows than we need, drop the extras so we never exceed 5 total.
+      const idsInBatch = batchPairs.map((p) => p.id).filter((id): id is string => Boolean(id));
+      if (idsInBatch.length > take) {
+        const idsToDelete = idsInBatch.slice(take);
+        await supabase.from('captions').delete().in('id', idsToDelete);
+      }
+    }
+
+    if (mergedPairs.length === 0 && lastCaptionError) {
       return NextResponse.json(
-        { success: false, error: `Generate captions failed: ${s4.status} ${errText.slice(0, 200)}` },
+        {
+          success: false,
+          error: `Generate captions failed: ${lastCaptionError.slice(0, 280)}`,
+        },
         { status: 502 }
       );
     }
 
-    const rawCaptions = await s4.json();
-    const allCaptions = normalizeCaptions(rawCaptions);
-    const captions = allCaptions.slice(0, 5);
-
-    // Safety net: if upstream still generated >5 rows, remove extras by id.
-    const generatedIds = extractCaptionIds(rawCaptions);
-    if (generatedIds.length > 5) {
-      const idsToDelete = generatedIds.slice(5);
-      await supabase.from('captions').delete().in('id', idsToDelete);
+    if (mergedPairs.length < CAPTION_TARGET) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Expected ${CAPTION_TARGET} captions; got ${mergedPairs.length} after up to ${MAX_GENERATE_ATTEMPTS} attempt(s).${
+            lastCaptionError ? ` Last: ${lastCaptionError.slice(0, 240)}` : ''
+          }`,
+        },
+        { status: 502 }
+      );
     }
+
+    const captions = mergedPairs.slice(0, CAPTION_TARGET).map((p) => p.text);
 
     return NextResponse.json({
       success: true,

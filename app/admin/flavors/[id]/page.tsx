@@ -70,7 +70,7 @@ export default function StepBuilder({ params: paramsPromise }: { params: Promise
     : null;
 
   const fetchCaptionHistory = async (page: number) => {
-    if (!supabase) return;
+    if (!supabase) return { rowCount: 0, total: 0 };
     const numericId = parseInt(params.id);
     const from = (page - 1) * CAPTION_PAGE_SIZE;
     const to = from + CAPTION_PAGE_SIZE - 1;
@@ -82,8 +82,11 @@ export default function StepBuilder({ params: paramsPromise }: { params: Promise
       .order('created_datetime_utc', { ascending: false })
       .range(from, to);
 
-    setCaptions(captionData || []);
-    setTotalCount(count ?? 0);
+    const rows = captionData || [];
+    setCaptions(rows);
+    const total = count ?? 0;
+    setTotalCount(total);
+    return { rowCount: rows.length, total };
   };
 
   const fetchData = async () => {
@@ -169,6 +172,20 @@ export default function StepBuilder({ params: paramsPromise }: { params: Promise
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const deleteCaption = async (id: string) => {
+    if (!supabase) return;
+    if (!confirm('Delete this caption from the log? This cannot be undone.')) return;
+    const { error } = await supabase.from('captions').delete().eq('id', id);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    const { rowCount } = await fetchCaptionHistory(captionPage);
+    if (rowCount === 0 && captionPage > 1) {
+      setCaptionPage((p) => Math.max(1, p - 1));
+    }
   };
 
   // --- Flavor Actions ---
@@ -705,14 +722,25 @@ export default function StepBuilder({ params: paramsPromise }: { params: Promise
                   </div>
                   <div className="p-8 flex-1 flex flex-col justify-between">
                     <p className="text-md font-bold dark:text-slate-100 italic leading-relaxed mb-6">"{c.content}"</p>
-                    <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800/50">
+                    <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800/50 gap-3 flex-wrap">
                       <span className="text-[9px] font-black uppercase text-slate-400 tracking-tighter italic flex items-center gap-2">
                         <CalendarDays size={10} className="text-blue-500"/> {new Date(c.created_datetime_utc).toLocaleString()}
                       </span>
-                      <button onClick={() => handleCopy(c.content, c.id)} className="flex items-center gap-1.5 text-[9px] font-black uppercase text-slate-400 hover:text-blue-600 transition-colors">
-                        {copiedId === c.id ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
-                        <span>{copiedId === c.id ? 'Saved' : 'Copy'}</span>
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => deleteCaption(c.id)}
+                          className="flex items-center gap-1.5 text-[9px] font-black uppercase text-slate-400 hover:text-red-500 transition-colors"
+                          title="Delete caption"
+                        >
+                          <Trash2 size={12} />
+                          <span>Delete</span>
+                        </button>
+                        <button onClick={() => handleCopy(c.content, c.id)} className="flex items-center gap-1.5 text-[9px] font-black uppercase text-slate-400 hover:text-blue-600 transition-colors">
+                          {copiedId === c.id ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
+                          <span>{copiedId === c.id ? 'Saved' : 'Copy'}</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
