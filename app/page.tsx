@@ -7,6 +7,8 @@ import { useEffect, useState } from 'react';
 export default function LandingPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [currentEmail, setCurrentEmail] = useState<string | null>(null);
+  const [isDenied, setIsDenied] = useState(false);
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,6 +20,7 @@ export default function LandingPage() {
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        setCurrentEmail(user.email ?? null);
         const { data: profile } = await supabase
           .from('profiles')
           .select('is_superadmin, is_matrix_admin')
@@ -27,6 +30,7 @@ export default function LandingPage() {
         if (profile?.is_superadmin || profile?.is_matrix_admin) {
           router.push('/admin/flavors');
         } else {
+          setIsDenied(true);
           setError("Access Denied: You do not have admin privileges.");
         }
       }
@@ -36,9 +40,11 @@ export default function LandingPage() {
     // Catch URL errors (e.g., from your callback route)
     const params = new URLSearchParams(window.location.search);
     if (params.get('error') === 'unauthorized') {
+      setIsDenied(true);
       setError("Unauthorized: Admin clearance required.");
     }
   }, [router, supabase]);
+
 
   const handleGoogleLogin = async () => {
     setError(null);
@@ -78,6 +84,22 @@ export default function LandingPage() {
 
         {/* Action Card */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-10 rounded-[3rem] shadow-2xl dark:shadow-none transition-all">
+          {isDenied && (
+            <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/30 rounded-xl text-left">
+              <p className="text-amber-700 dark:text-amber-400 text-[10px] font-black uppercase tracking-tight">
+                Access denied for this account.
+              </p>
+              {currentEmail && (
+                <p className="mt-2 text-[11px] text-slate-600 dark:text-slate-400 font-bold break-all">
+                  Signed in as: {currentEmail}
+                </p>
+              )}
+              <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-500">
+                Try logging in again with a different Google account.
+              </p>
+            </div>
+          )}
+
           <button
             onClick={handleGoogleLogin}
             className="w-full flex items-center justify-center gap-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-5 rounded-2xl font-black uppercase text-[11px] hover:scale-[1.02] active:scale-95 transition-all shadow-lg"
@@ -89,6 +111,7 @@ export default function LandingPage() {
             />
             Sign in with Google
           </button>
+
 
           {error && (
             <div className="mt-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-xl">

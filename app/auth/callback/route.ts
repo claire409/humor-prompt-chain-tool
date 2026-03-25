@@ -34,6 +34,9 @@ export async function GET(request: Request) {
         // Success! Send to the Flavor Manager
         return NextResponse.redirect(`${origin}/admin/flavors`);
       }
+
+      // Not authorized: clear session so they can retry with another account cleanly.
+      await supabase.auth.signOut();
     }
   }
 

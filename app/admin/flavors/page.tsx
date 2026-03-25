@@ -15,6 +15,7 @@ export default function FlavorRegistry() {
   const [flavors, setFlavors] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [currentEmail, setCurrentEmail] = useState<string>('');
 
   const [newFlavor, setNewFlavor] = useState({
     slug: '',
@@ -35,6 +36,19 @@ export default function FlavorRegistry() {
   };
 
   useEffect(() => { fetchFlavors(); }, []);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setCurrentEmail(user?.email || '');
+    };
+    loadUser();
+  }, []);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    router.replace('/');
+  };
 
   const handleCreateFlavor = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,8 +81,7 @@ export default function FlavorRegistry() {
   );
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-12 bg-white dark:bg-slate-950 min-h-screen transition-colors duration-500">
-
+    <div suppressHydrationWarning className="p-8 max-w-6xl mx-auto space-y-12 bg-white dark:bg-slate-950 min-h-screen transition-colors duration-500">
       {/* Header Section */}
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-slate-100 dark:border-slate-800 pb-12">
         <div className="space-y-4">
@@ -77,28 +90,45 @@ export default function FlavorRegistry() {
             <span className="text-[10px] font-black uppercase tracking-[0.3em]">System Registry</span>
           </div>
           <h1 className="text-6xl font-black uppercase tracking-tighter dark:text-white leading-none">
-            Humor <span className="text-blue-600">Flavors</span>
+            <span className="block">Humor</span>
+            <span className="block text-blue-600">Flavors</span>
           </h1>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="relative group">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={18} />
-            <input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by ID or Slug..."
-              className="bg-slate-100 dark:bg-slate-900 border-none rounded-2xl py-4 pl-12 pr-6 text-sm font-bold w-64 focus:ring-2 focus:ring-blue-500 transition-all outline-none dark:text-white"
-            />
+        <div className="flex flex-col items-end gap-4">
+          <div className="flex flex-col items-end gap-2 bg-white/90 dark:bg-slate-900/90 backdrop-blur px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            {currentEmail && (
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                Signed in as: <span className="text-slate-600 dark:text-slate-300 normal-case">{currentEmail}</span>
+              </span>
+            )}
+            <button
+              onClick={handleSignOut}
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900 transition-all"
+            >
+              Sign Out
+            </button>
           </div>
-          <button
-            onClick={() => setIsAdding(!isAdding)}
-            className={`p-4 rounded-2xl shadow-lg transition-all active:scale-95 ${
-              isAdding ? 'bg-slate-200 dark:bg-slate-800 text-slate-600' : 'bg-blue-600 text-white shadow-blue-500/20'
-            }`}
-          >
-            <PlusCircle size={24} className={isAdding ? 'rotate-45 transition-transform' : 'transition-transform'} />
-          </button>
+
+          <div className="flex items-center gap-4">
+            <div className="relative group">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={18} />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by ID or Slug..."
+                className="bg-slate-100 dark:bg-slate-900 border-none rounded-2xl py-4 pl-12 pr-6 text-sm font-bold w-64 focus:ring-2 focus:ring-blue-500 transition-all outline-none dark:text-white"
+              />
+            </div>
+            <button
+              onClick={() => setIsAdding(!isAdding)}
+              className={`p-4 rounded-2xl shadow-lg transition-all active:scale-95 ${
+                isAdding ? 'bg-slate-200 dark:bg-slate-800 text-slate-600' : 'bg-blue-600 text-white shadow-blue-500/20'
+              }`}
+            >
+              <PlusCircle size={24} className={isAdding ? 'rotate-45 transition-transform' : 'transition-transform'} />
+            </button>
+          </div>
         </div>
       </header>
 
