@@ -100,9 +100,8 @@ export default function FlavorRegistry() {
             <Database size={24} />
             <span className="text-[10px] font-black uppercase tracking-[0.3em]">System Registry</span>
           </div>
-          <h1 className="text-6xl font-black uppercase tracking-tighter dark:text-white leading-none">
-            <span className="block">Humor</span>
-            <span className="block text-blue-600">Flavors</span>
+          <h1 className="text-[clamp(2.25rem,9vw,5.5rem)] font-black uppercase tracking-tighter dark:text-white leading-none whitespace-nowrap">
+            Humor <span className="text-blue-600">Flavors</span>
           </h1>
         </div>
 
