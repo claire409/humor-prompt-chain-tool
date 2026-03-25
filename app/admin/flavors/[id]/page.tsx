@@ -63,12 +63,14 @@ export default function StepBuilder({ params: paramsPromise }: { params: Promise
   const [isAddingStep, setIsAddingStep] = useState(false);
   const [currentEmail, setCurrentEmail] = useState<string>('');
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabase = supabaseUrl && supabaseAnonKey
+    ? createBrowserClient(supabaseUrl, supabaseAnonKey)
+    : null;
 
   const fetchCaptionHistory = async (page: number) => {
+    if (!supabase) return;
     const numericId = parseInt(params.id);
     const from = (page - 1) * CAPTION_PAGE_SIZE;
     const to = from + CAPTION_PAGE_SIZE - 1;
@@ -85,6 +87,7 @@ export default function StepBuilder({ params: paramsPromise }: { params: Promise
   };
 
   const fetchData = async () => {
+    if (!supabase) return;
     const numericId = parseInt(params.id);
 
     const { data: fData } = await supabase
@@ -143,15 +146,16 @@ export default function StepBuilder({ params: paramsPromise }: { params: Promise
 
   useEffect(() => {
     fetchData();
-  }, [params.id]);
+  }, [params.id, supabase]);
 
   useEffect(() => {
+    if (!supabase) return;
     const loadUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentEmail(user?.email || '');
     };
     loadUser();
-  }, []);
+  }, [supabase]);
 
   useLayoutEffect(() => {
     setCaptionPage(1);
@@ -159,7 +163,7 @@ export default function StepBuilder({ params: paramsPromise }: { params: Promise
 
   useEffect(() => {
     fetchCaptionHistory(captionPage);
-  }, [params.id, captionPage]);
+  }, [params.id, captionPage, supabase]);
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -169,6 +173,7 @@ export default function StepBuilder({ params: paramsPromise }: { params: Promise
 
   // --- Flavor Actions ---
   const saveFlavorEdits = async () => {
+    if (!supabase) return;
     const { error } = await supabase
       .from('humor_flavors')
       .update({
@@ -186,6 +191,7 @@ export default function StepBuilder({ params: paramsPromise }: { params: Promise
   };
 
   const deleteFlavor = async () => {
+    if (!supabase) return;
     if (!confirm("⚠️ DANGER: This will permanently delete this Flavor and ALL its logic steps. This cannot be undone. Proceed?")) return;
     const { error } = await supabase.from('humor_flavors').delete().eq('id', params.id);
     if (!error) {
@@ -198,6 +204,7 @@ export default function StepBuilder({ params: paramsPromise }: { params: Promise
   // --- Step Actions ---
   const handleAddStep = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!supabase) return;
     if (!stepTypes.length || !models.length) return alert("System data loading...");
 
     setIsAddingStep(true);
@@ -237,6 +244,7 @@ export default function StepBuilder({ params: paramsPromise }: { params: Promise
   };
 
   const deleteStep = async (id: string) => {
+    if (!supabase) return;
     if (!confirm("Delete this step?")) return;
     const { error } = await supabase.from('humor_flavor_steps').delete().eq('id', id);
     if (error) return;
@@ -256,6 +264,7 @@ export default function StepBuilder({ params: paramsPromise }: { params: Promise
   };
 
   const moveStep = async (index: number, direction: 'up' | 'down') => {
+    if (!supabase) return;
     const newIndex = direction === 'up' ? index - 1 : index + 1;
     if (newIndex < 0 || newIndex >= steps.length) return;
 
@@ -285,6 +294,7 @@ export default function StepBuilder({ params: paramsPromise }: { params: Promise
   };
 
   const saveStepEdit = async () => {
+    if (!supabase) return;
     const t = parseFloat(String(editBuffer.llm_temperature ?? ''));
     const { error } = await supabase
       .from('humor_flavor_steps')
@@ -350,12 +360,18 @@ export default function StepBuilder({ params: paramsPromise }: { params: Promise
   };
 
   const handleSignOut = async () => {
+    if (!supabase) return;
     await supabase.auth.signOut();
     router.replace('/');
   };
 
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-8 bg-white dark:bg-slate-950 min-h-screen transition-colors duration-500">
+      {!supabase && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+          Missing Supabase environment variables. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+        </div>
+      )}
       <div className="flex justify-end">
         <div className="flex flex-col items-end gap-2 bg-white/90 dark:bg-slate-900/90 backdrop-blur px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
           {currentEmail && (

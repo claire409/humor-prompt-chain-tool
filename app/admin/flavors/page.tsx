@@ -22,12 +22,14 @@ export default function FlavorRegistry() {
     description: ''
   });
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabase = supabaseUrl && supabaseAnonKey
+    ? createBrowserClient(supabaseUrl, supabaseAnonKey)
+    : null;
 
   const fetchFlavors = async () => {
+    if (!supabase) return;
     const { data } = await supabase
       .from('humor_flavors')
       .select('*')
@@ -35,23 +37,26 @@ export default function FlavorRegistry() {
     if (data) setFlavors(data);
   };
 
-  useEffect(() => { fetchFlavors(); }, []);
+  useEffect(() => { if (supabase) fetchFlavors(); }, [supabase]);
 
   useEffect(() => {
+    if (!supabase) return;
     const loadUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentEmail(user?.email || '');
     };
     loadUser();
-  }, []);
+  }, [supabase]);
 
   const handleSignOut = async () => {
+    if (!supabase) return;
     await supabase.auth.signOut();
     router.replace('/');
   };
 
   const handleCreateFlavor = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!supabase) return;
 
     // Ensure slug is clean one last time
     const cleanSlug = newFlavor.slug.toLowerCase().trim().replace(/[^a-z0-9-]/g, '-');
@@ -83,6 +88,12 @@ export default function FlavorRegistry() {
   return (
     <div suppressHydrationWarning className="p-8 max-w-6xl mx-auto space-y-12 bg-white dark:bg-slate-950 min-h-screen transition-colors duration-500">
       {/* Header Section */}
+      {!supabase && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+          Missing Supabase environment variables. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+        </div>
+      )}
+
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-slate-100 dark:border-slate-800 pb-12">
         <div className="space-y-4">
           <div className="flex items-center gap-3 text-blue-600">

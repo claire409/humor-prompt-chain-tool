@@ -10,13 +10,15 @@ export default function LandingPage() {
   const [currentEmail, setCurrentEmail] = useState<string | null>(null);
   const [isDenied, setIsDenied] = useState(false);
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabase = supabaseUrl && supabaseAnonKey
+    ? createBrowserClient(supabaseUrl, supabaseAnonKey)
+    : null;
 
   // Check if user is already logged in and redirect if they are admin
   useEffect(() => {
+    if (!supabase) return;
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
@@ -47,6 +49,7 @@ export default function LandingPage() {
 
 
   const handleGoogleLogin = async () => {
+    if (!supabase) return;
     setError(null);
     await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -84,6 +87,13 @@ export default function LandingPage() {
 
         {/* Action Card */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-10 rounded-[3rem] shadow-2xl dark:shadow-none transition-all">
+          {!supabase && (
+            <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/30 rounded-xl">
+              <p className="text-amber-700 dark:text-amber-400 text-[10px] font-black uppercase tracking-tight">
+                Missing Supabase environment variables.
+              </p>
+            </div>
+          )}
           {isDenied && (
             <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/30 rounded-xl text-left">
               <p className="text-amber-700 dark:text-amber-400 text-[10px] font-black uppercase tracking-tight">
