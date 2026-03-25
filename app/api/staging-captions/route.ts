@@ -183,7 +183,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const { presignedUrl, cdnUrl } = presignedPayload;
+    const presignedUrl = presignedPayload.presignedUrl;
+    const cdnUrl = presignedPayload.cdnUrl;
+    if (!presignedUrl || !cdnUrl) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid presigned payload (missing URLs)' },
+        { status: 502 }
+      );
+    }
 
     const arrayBuffer = await file.arrayBuffer();
     const put = await fetch(presignedUrl, {
