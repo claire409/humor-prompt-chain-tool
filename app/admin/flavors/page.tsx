@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'; // <-- Added this
 import {
   PlusCircle, Search, Sparkles, Terminal, Hash,
   ChevronRight, Database, Fingerprint, AlignLeft,
-  LayoutGrid, Activity
+  LayoutGrid, Activity, Copy
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -78,6 +78,84 @@ export default function FlavorRegistry() {
       // Redirect to the new flavor's detail page immediately
       router.push(`/admin/flavors/${data[0].id}`);
     }
+  };
+
+  const slugify = (s: string) =>
+    s
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+
+  const uniqueSlug = (desired: string) => {
+    const base = slugify(desired);
+    if (!base) return '';
+    const taken = new Set(flavors.map((f) => String(f.slug)));
+    if (!taken.has(base)) return base;
+    let i = 2;
+    while (taken.has(`${base}-${i}`)) i++;
+    return `${base}-${i}`;
+  };
+
+  const handleDuplicateFlavor = async (flavor: any) => {
+    if (!supabase) return;
+
+    const defaultSlug = `${String(flavor.slug)}-copy`;
+    const input = prompt('New flavor slug (must be unique):', defaultSlug);
+    if (input == null) return;
+
+    const newSlug = uniqueSlug(input);
+    if (!newSlug) {
+      alert('Please provide a valid slug.');
+      return;
+    }
+
+    const { data: newFlavorRow, error: flavorErr } = await supabase
+      .from('humor_flavors')
+      .insert([{ slug: newSlug, description: flavor.description }])
+      .select('*')
+      .single();
+
+    if (flavorErr || !newFlavorRow) {
+      alert(flavorErr?.message || 'Failed to duplicate flavor.');
+      return;
+    }
+
+    const { data: stepsData, error: stepsErr } = await supabase
+      .from('humor_flavor_steps')
+      .select('*')
+      .eq('humor_flavor_id', flavor.id)
+      .order('order_by', { ascending: true });
+
+    if (stepsErr) {
+      alert(stepsErr.message);
+      return;
+    }
+
+    const rows = (stepsData || []).map((s: any) => ({
+      humor_flavor_id: newFlavorRow.id,
+      humor_flavor_step_type_id: s.humor_flavor_step_type_id,
+      description: s.description,
+      llm_system_prompt: s.llm_system_prompt,
+      llm_user_prompt: s.llm_user_prompt,
+      llm_temperature: s.llm_temperature,
+      llm_input_type_id: s.llm_input_type_id,
+      llm_output_type_id: s.llm_output_type_id,
+      llm_model_id: s.llm_model_id,
+      order_by: s.order_by,
+    }));
+
+    if (rows.length > 0) {
+      const { error: insertStepsErr } = await supabase.from('humor_flavor_steps').insert(rows);
+      if (insertStepsErr) {
+        alert(insertStepsErr.message);
+        return;
+      }
+    }
+
+    await fetchFlavors();
+    router.push(`/admin/flavors/${newFlavorRow.id}`);
   };
 
   const filteredFlavors = flavors.filter(f =>
@@ -205,8 +283,23 @@ export default function FlavorRegistry() {
                     {flavor.id.toString().padStart(3, '0')}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-1 bg-slate-200/50 dark:bg-slate-800/50 rounded-full text-[8px] font-black uppercase text-slate-400 group-hover:text-blue-500 transition-colors">
-                  <Activity size={10}/> Active
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleDuplicateFlavor(flavor);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest bg-slate-200/50 dark:bg-slate-800/50 text-slate-400 hover:text-blue-600 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+                    title="Duplicate flavor + steps"
+                  >
+                    <Copy size={10} />
+                    Duplicate
+                  </button>
+                  <div className="flex items-center gap-2 px-3 py-1 bg-slate-200/50 dark:bg-slate-800/50 rounded-full text-[8px] font-black uppercase text-slate-400 group-hover:text-blue-500 transition-colors">
+                    <Activity size={10}/> Active
+                  </div>
                 </div>
               </div>
 
